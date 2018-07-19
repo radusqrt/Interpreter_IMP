@@ -9,21 +9,22 @@ class Interpretor a where
 	validate_AST :: a -> Bool 
 	get_next_state :: (a, M.Map String AExp) -> (a, M.Map String AExp)
 
-class Operation data_type operations where
-    operation :: data_type -> operations -> data_type -> M.Map String data_type -> data_type
+class Operation data_type return_type operations where
+    operation :: data_type -> operations -> data_type -> M.Map String data_type -> return_type
  
 
 --operatiile peste tipurile de date
 data AOp = Plus | Minus
 data AExp = AOperation AExp AOp AExp | AValue Integer | AString String
 --tipurile de date
-data BExp = BOperation BExp BOp BExp | BValue Bool | AExp BOp AExp | BString --variabile ca boolean nu cred ca exista momentan  
-data BOp = And | Or | Greater | Lesser
+data BExp = BCompare AExp BAOp AExp | BOperation BExp BLOp BExp | BValue Bool
+data BLOp = And | Or 
+data BAOp = Greater | Lesser
 --AST-ul propriu zis
 data AST  = Init [String] AST | Asign String AExp | If BExp AST AST | While BExp AST | Instructions AST AST | No_AST
  
  
-instance Operation AExp AOp where
+instance Operation AExp AExp AOp where
     --operatiile alese
     operation (AValue a) Plus (AValue b) _ = AValue (a + b)
     operation (AValue a) Minus (AValue b) _ = AValue (a - b)
@@ -36,9 +37,17 @@ instance Operation AExp AOp where
     operation exp1 op exp2@(AOperation argv1 argv2 argv3) symb_map = operation exp1 op (operation argv1 argv2 argv3 symb_map) symb_map
     
 
-instance Operation BExp BOp where 
-	--de facut suport de boolean sa pot implementa while si if pentru a testa 	
+instance Operation BExp BExp BLOp where 
+	--operatiile alese
+    operation (BValue a) And (BValue b) _ = BValue (a && b)
+    operation (BValue a) Or (BValue b) _ = BValue (a || b) 
+    --spargere in chestiile elementare
+    operation exp1@(BOperation argv11 argv21 argv31) op exp2@(BOperation argv12 argv22 argv32) m = operation (operation argv11 argv21 argv31 m) op (operation argv12 argv22 argv32 m) m
+    operation exp1@(BOperation argv1 argv2 argv3) op exp2 m = operation (operation argv1 argv2 argv3 m) op exp2 m
+    operation exp1 op exp2@(BOperation argv1 argv2 argv3) m = operation exp1 op (operation argv1 argv2 argv3 m) m
 
+
+    
 
 instance Interpretor AST where
 	--folosit pentru validarea unui AST
@@ -61,9 +70,13 @@ instance Show AOp where
     show Plus  = "+"
     show Minus = "-"
  
-instance Show BOp where
+instance Show BLOp where
     show And = "&&"
     show Or  = "||"
+
+instance Show BAOp where
+    show Greater = ">"
+    show Lesser  = "<"
  
 instance Show AExp where
     show (AOperation exp1 op exp2) = show exp1 ++ " " ++ show op  ++ " " ++ show exp2
@@ -71,7 +84,7 @@ instance Show AExp where
  
 instance Show BExp where
     show (BValue boolean) = show boolean
-    show (AExp boolean arithmetic) = (show boolean) ++ (show arithmetic)
+    show (BCompare exp1 boolean arithmetic) = (show exp1) ++ (show boolean) ++ (show arithmetic)
     show (BOperation bool1 op bool2) = (show bool1) ++ (show op) ++ (show bool2)
  
 instance Show AST where
