@@ -140,7 +140,7 @@ bOr = do {
 }
 
 bOperations :: M BExp
-bOperations = bOr .||. bAnd
+bOperations = bOr .||. bAnd .||. b_arm_term
 
 b_arm_term :: M BExp
 b_arm_term = do {
@@ -149,7 +149,8 @@ b_arm_term = do {
     whitespace;
     bop <- charp '>' .||. charp '<';
     bterm2 <- aTerm .||. aOperation;
-    (charp_whitespace ')');
+    (charp ')');
+    whitespace;
     return (BCompare bterm1 (get_barm_operand bop) bterm2)
 }
 
@@ -206,19 +207,54 @@ asign_parser = do {
 
 init_parser :: M AST 
 init_parser = do {
-    
+    (string "int");
+    --cum parsez corect pana la newline?
+    return (Init ["a"] No_AST)
+}
+--de testat if-ul!! nu e testat at all
+if_parser :: M AST
+if_parser = do {
+    (string "if");
+    b_op <- bOperations;
+    charp "{"
+    ast1 <- instructions_parser;
+    charp "}"
+    (string "else");
+    charp "{"
+    ast2 <- instructions_parser;
+    charp "}"
+    return (If b_op ast1 ast2)
 }
 
+while_parser :: M AST
+while_parser = return  (No_AST)
 
--- main = do putStrLn (show new_AST)
---     where
---         new_AST = parse_syntax tokens
---         tokens = tokenize parsed
---         parsed = (filter_chars unparsed_cod)
---         unparsed_cod = 
---             "int s, n \n \
---             \ n = (1000 + (5 + 7)) \n \
---             \ s = (n + (3 + (2 + 7) - n + (s - 3)))\n"
+operations_parser :: M AST
+operations_parser = asign_parser -- .||. if_parser .||. while_parser
+
+
+instructions_parser :: M AST 
+instructions_parser = do {
+    instr1 <- operations_parser;
+    (star (charp '\n'));
+    instr2 <- instructions_parser .||. (return (No_AST));
+    return (Instructions instr1 instr2)
+}
+
+get_maybe :: Maybe (AST, String) -> AST
+get_maybe Nothing = No_AST
+get_maybe (Just (ast, str)) = ast
+
+get_maybe_str :: Maybe (AST, String) -> String
+get_maybe_str Nothing = "Nothing"
+get_maybe_str (Just (ast,str)) = str
+
+main = do putStr ((show (get_maybe ((get_content instructions_parser) unparsed_code))) ++ "Unparsed:" ++ (get_maybe_str ((get_content instructions_parser) unparsed_code)))
+     where
+         unparsed_code = 
+             "if True \n\
+             \{n=(1000+(5+7))}\n\
+             \{s=(1000+(5+(s+3)))}\n"
 
 
 instance Show AOp where
@@ -249,3 +285,4 @@ instance Show AST where
     show (If bool_expr first_branch second_branch) = "(If " ++ (show bool_expr) ++ " " ++ (show first_branch) ++ " " ++ (show second_branch) ++ ")"
     show (Instructions next_instr remaining_AST) = "(Instructions" ++ (show next_instr) ++ " " ++ (show remaining_AST) ++ ")"
     show (While bool_expr while_AST) = "(while " ++ (show bool_expr) ++ (show while_AST) ++ ")"
+    show (No_AST) = " No_AST "
