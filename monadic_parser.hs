@@ -7,7 +7,7 @@ data AOp = Plus | Minus
 data AExp = AOperation AExp AOp AExp | AValue Integer | AString String
 --tipurile de date
 data BExp = BCompare AExp BAOp AExp | BOperation BExp BLOp BExp | BValue Bool
-data BLOp = And | Or 
+data BLOp = And | Or
 data BAOp = Greater | Lesser
 --AST-ul propriu zis
 data AST  = Init [String] AST | Asign String AExp | If BExp AST AST | While BExp AST | Instructions AST AST | No_AST
@@ -57,12 +57,18 @@ sat p = M (\s -> case s of
 charp :: Char -> M Char
 charp c = (sat (== c)); 
     
-charp_whitespace :: Char -> M [Char]
-charp_whitespace c = do {
-    e <- (star (charp c));
-    whitespace;
+
+parse_clean :: M a -> M a 
+parse_clean parser = do {
+    star ((string "\n") .||. (string " "));
+    e <- parser;
+    star ((string "\n") .||. (string " "));
     return e
 }
+
+string :: String -> M String
+string (x:xs) = (charp x) >>= (\c -> string xs >>= (\str -> return (c:str))) 
+string [] = return []
 
 get_content :: M a -> (String -> Maybe (a, String))
 get_content (M var) = var
@@ -91,156 +97,162 @@ validate_number (x:xs) = if (isNumber x)
 
 numeric_parser :: M String
 numeric_parser = do {
-    e <- numeric;
-    whitespace;
+    e <- (parse_clean numeric);
     return e 
 }
 
-string :: String -> M String
-string (x:xs) = (charp x) >>= (\c -> string xs >>= (\str -> return (c:str))) 
-string [] = whitespace
-
---boolean logic
+-- --boolean logic
 bTrue :: M BExp
 bTrue = do {
-     string "True";
-     return (BValue True) 
+      string "True";
+      return (BValue True) 
 }
 
 bFalse :: M BExp
 bFalse = do {
-    string "False";
-    return (BValue False) 
-}
-
---sigur pot generalizarea partea cu operatiile pentru a scoate codul duplicat
-
-bAnd :: M BExp 
-bAnd = do {
-    (charp '(');
-    bterm1 <- bOperations .||. bFalse .||. bTrue;
-    whitespace;
-    op <- string "&&";
-    bterm2 <- bOperations .||. bFalse .||. bTrue;
-    (charp ')');
-    return (BOperation bterm1 And bterm2)
+     string "False";
+     return (BValue False) 
 }
 
 
-
-bOr :: M BExp 
-bOr = do {
-    (charp_whitespace '(');
-    bterm1 <- bOperations .||. bFalse .||. bTrue;
-    whitespace;
-    op <- string "||";
-    bterm2 <- bOperations .||. bFalse .||. bTrue;
-    (charp ')');
-    return (BOperation bterm1 Or bterm2)    
+bl_terms_parse :: M BExp
+bl_terms_parse = do {
+    term <- parse_clean (bl_expr .||. bTrue .||. bFalse);
+    b_op <- parse_clean (string "&&" .||. string "||");
+    remaining_terms <- (bl_terms_parse .||. bl_expr .||. bTrue .||. bFalse);
+    return (BOperation term (get_bop b_op) remaining_terms)
 }
 
-bOperations :: M BExp
-bOperations = bOr .||. bAnd .||. b_arm_term
-
-b_arm_term :: M BExp
-b_arm_term = do {
-    (charp '(');
-    bterm1 <- aTerm .||. aOperation;
-    whitespace;
-    bop <- charp '>' .||. charp '<';
-    bterm2 <- aTerm .||. aOperation;
-    (charp ')');
-    whitespace;
-    return (BCompare bterm1 (get_barm_operand bop) bterm2)
+bl_expr :: M BExp 
+bl_expr = do {
+    parse_clean (string "(");
+    bterm1 <- parse_clean (bl_expr .||. bl_terms_parse .||. bTrue .||. bFalse);
+    parse_clean (string ")");
+    return bterm1
 }
 
-get_barm_operand :: Char -> BAOp 
-get_barm_operand '>' = Greater
-get_barm_operand '<' = Lesser
+get_bop :: String -> BLOp
+get_bop "&&" = And
+get_bop "||" = Or
 
+b_expr :: M BExp
+b_expr =  bl_expr .||. ba_expr
 
---arithmetic logic
+-- --arithmetic logic
 
-aNumTerm :: M AExp
-aNumTerm = do {
-    whitespace;
-    var <- numeric_parser;
+aNum :: M AExp
+aNum = do {
+    var <- (parse_clean numeric_parser);
     return (AValue (read var :: Integer))
 }
 
-aVarTerm :: M AExp
-aVarTerm = do {
-    whitespace;
-    var <- variable_parser;
+aVar :: M AExp
+aVar = do {
+    var <- (parse_clean variable_parser);
     return (AString var)
 } 
 
-aTerm :: M AExp 
-aTerm = aVarTerm .||. aNumTerm
+a_ops :: M String
+a_ops = string "+" .||. string "-" 
 
-get_aritmetic_operand :: Char -> AOp 
-get_aritmetic_operand '+' = Plus
-get_aritmetic_operand '-' = Minus
-
-aOperation :: M AExp
-aOperation = do {
-    (charp '(');
-    aterm1 <- aOperation .||. aTerm;
-    aop    <- aOperand;
-    aterm2 <- aOperation .||. aTerm;
-    (charp ')');
-    return (AOperation aterm1 (get_aritmetic_operand aop) aterm2)  
+a_terms_parse :: M AExp
+a_terms_parse = do {
+    term <- parse_clean (a_expr .||. aNum .||. aVar);
+    a_op <- parse_clean a_ops;
+    remaining_terms <- parse_clean (a_terms_parse .||. a_expr .||. aNum .||. aVar);
+    return (AOperation term (get_aop a_op) remaining_terms)
 }
 
+a_expr :: M AExp
+a_expr = do {
+    parse_clean (charp '(');
+    aterm <- parse_clean (a_expr .||. a_terms_parse .||. aNum .||. aVar);
+    parse_clean (charp ')');    
+    return aterm  
+}
 
-aOperand :: M Char 
-aOperand = charp '+' .||. charp '-'
- 
+get_aop :: String -> AOp 
+get_aop "+" = Plus
+get_aop "-" = Minus
+
+ba_expr :: M BExp
+ba_expr = do {
+    parse_clean (string "(");
+    bterm1 <- parse_clean (a_expr .||. aVar .||. aNum);
+    baop <- parse_clean (string ">" .||. string "<");
+    bterm2 <- parse_clean (a_expr .||. aVar .||. aNum);
+    parse_clean (string ")");
+    return (BCompare bterm1 (get_baop baop) bterm2)
+}
+
+get_baop :: String -> BAOp 
+get_baop ">" = Greater
+get_baop "<" = Lesser
+
+
 
 asign_parser :: M AST
 asign_parser = do {
-    asigned_term <- variable_parser;
-    charp '=';
-    term <- aOperation .||. aTerm;
+    asigned_term <- parse_clean variable_parser;
+    parse_clean (charp '=');
+    term <- parse_clean (a_expr .||. aNum .||. aVar);
     return (Asign asigned_term term)
+}
+
+init_terms :: M String
+init_terms = do {
+    var <- parse_clean alphanumeric;
+    parse_clean (string ",");
+    return var
 }
 
 init_parser :: M AST 
 init_parser = do {
-    (string "int");
-    --cum parsez corect pana la newline?
-    return (Init ["a"] No_AST)
+    parse_clean (string "int");
+    vars <- star init_terms;
+    last_var <- parse_clean alphanumeric;
+    ast  <- instructions_parser;
+    return (Init (last_var:vars) ast)
 }
---de testat if-ul!! nu e testat at all
-if_parser :: M AST
-if_parser = do {
-    (string "if");
-    b_op <- bOperations;
-    charp "{"
+
+operations_parser :: M AST 
+operations_parser = while_expr .||. if_expr .||. asign_parser
+
+if_expr :: M AST
+if_expr = do {
+    parse_clean (string "if");
+    b_op <- b_expr;
+    parse_clean (charp '{');
     ast1 <- instructions_parser;
-    charp "}"
-    (string "else");
-    charp "{"
+    parse_clean (charp '}');
+    parse_clean (string "else");
+    parse_clean (charp '{');
     ast2 <- instructions_parser;
-    charp "}"
+    parse_clean (charp '}');
     return (If b_op ast1 ast2)
 }
 
-while_parser :: M AST
-while_parser = return  (No_AST)
-
-operations_parser :: M AST
-operations_parser = asign_parser -- .||. if_parser .||. while_parser
-
+while_expr :: M AST
+while_expr = do {
+    parse_clean (string "while");
+    b_op <- parse_clean b_expr;
+    parse_clean (string "{");
+    ast <- instructions_parser;
+    parse_clean (string "}");
+    return (While b_op ast)
+}
 
 instructions_parser :: M AST 
 instructions_parser = do {
     instr1 <- operations_parser;
-    (star (charp '\n'));
     instr2 <- instructions_parser .||. (return (No_AST));
     return (Instructions instr1 instr2)
 }
 
+
+
+
+-- --debug stuff
 get_maybe :: Maybe (AST, String) -> AST
 get_maybe Nothing = No_AST
 get_maybe (Just (ast, str)) = ast
@@ -249,12 +261,7 @@ get_maybe_str :: Maybe (AST, String) -> String
 get_maybe_str Nothing = "Nothing"
 get_maybe_str (Just (ast,str)) = str
 
-main = do putStr ((show (get_maybe ((get_content instructions_parser) unparsed_code))) ++ "Unparsed:" ++ (get_maybe_str ((get_content instructions_parser) unparsed_code)))
-     where
-         unparsed_code = 
-             "if True \n\
-             \{n=(1000+(5+7))}\n\
-             \{s=(1000+(5+(s+3)))}\n"
+
 
 
 instance Show AOp where
@@ -268,7 +275,7 @@ instance Show BLOp where
 instance Show BAOp where
     show Greater = "Greater"
     show Lesser  = "Lesser"
- 
+
 instance Show AExp where
     show (AOperation exp1 op exp2) = "(AOperation "++ show exp1 ++ " " ++ show op  ++ " " ++ show exp2 ++ ")"
     show (AString str) = "(AString " ++ show str ++ ")"
@@ -276,7 +283,7 @@ instance Show AExp where
 
 instance Show BExp where
     show (BValue boolean) = show boolean
-    show (BCompare exp1 boolean arithmetic) = (show exp1) ++ (show boolean) ++ (show arithmetic)
+    show (BCompare exp1 boolean arithmetic) = "(BCompare " ++ (show exp1) ++ (show boolean) ++ (show arithmetic) ++ ")"
     show (BOperation bool1 op bool2) = "(Boperation " ++ (show bool1) ++ " " ++ (show op) ++ " " ++ (show bool2) ++ ")"
  
 instance Show AST where
