@@ -12,35 +12,99 @@ data BAOp = Greater | Lesser
 --AST-ul propriu zis
 data AST  = Init [String] AST | Asign String AExp | If BExp AST AST | While BExp AST | Instructions AST AST | No_AST
 
-newtype M a = M (String -> Maybe (a, String))
 
+data Item =
+      -- instructiune din program (ce era initial AST)
+      -- operatie din program (ce era initial AExp, BExp)
+
+
+newtype M a = M {parse :: String -> Maybe (a, String)} 
+
+{-
+class Functor t where 
+  fmap :: (a -> b) -> t a -> t b
+
+signatura particulara a implementarii din instanta (vezi jos)
+  fmap :: (a -> b) -> M a -> M b
+
+  f :: String -> [Int]
+  M String ... M [Int]
+-}
+    
 instance Functor M where
-  fmap = liftM
+  fmap f (M p) = \s -> case p s of
+                        Just (x,s') -> (f x,s')
+                        Nothing -> Nothing
 
 instance Applicative M where
-  pure  = return
-  (<*>) = ap
+  pure = M (\s -> Just (x, s))
+{-
+  (<*>) :: t (a -> b) -> t a -> t b
+  (<*>) :: M (a -> b) -> M a -> M b
+-}
+  (M pf) <*> (M p) = \s -> case pf s of
+                            Nothing -> Nothing
+                            Just (f,s') -> case p s' of
+                                            Nothing -> Nothing
+                                            Just (x, s'') -> Just (f x,s'')
+
+instance Alternative M where
+    empty = M (\s -> Nothing)
+    (M p) <|> (M p') = \s -> case p s of
+                                Nothing -> p' s 
+                                x -> x
+
+{-
+   Operatii care vin pe gratis:
+   some :: t a -> t [a]
+   some v = ( (:) <$> v ) <*> many v
+   
+   (:) :: a' -> [a'] -> [a']
+   a = a'
+   b = [a'] -> [a']
+   <$> :: (a -> b) -> a -> b
+   v = t a''
+   a unif t a''
+
+   (:) <$> v :: [t a''] -> [t a'']
+
+ exemplu
+   v :: M Char
+   (:) <$> v :: [M Char] -> [M Char]
+   ia o lista de parsere si pune-l pe v in ea
+
+   many v :: M [Char]
+
+
+-}
 
 instance Monad M where    
-    return x = M (\s -> Just (x, s))
+    return = pure 
+{-
+  (>>=) :: t a -> (a -> t b) -> t b 
+-}
     (>>=) (M p) f =  (M (\s -> case (p s) of
-                        Just (v, s') -> ((get_content (f v)) s')
+                        Just (v, s') -> ((parse (f v)) s')
                         Nothing -> Nothing))
 
 
 
+{-
 star :: M a -> M [a]
 star p = plus p .||. return []
 
 plus :: M a -> M [a]
 plus p = p >>=  (\x -> star p >>= (\y -> return (x:y)))
+-}
 
+{-
 --beta ideas
 and_one :: M a ->  M a -> M [a]
 and_one p p' = p >>= (\x -> p' >>= (\y -> return (x:[y])))
 
 and_multiple :: M [a] -> M a -> M [a]
 and_multiple p p' = p >>= (\x -> p' >>= (\y -> return (x ++ [y])))
+-}
 
 sat :: (Char -> Bool) -> M Char
 sat p = M (\s -> case s of 
@@ -49,13 +113,15 @@ sat p = M (\s -> case s of
                             True -> Just ((head x), (tail x))
                             False -> Nothing)
 
+{-
 (.||.) :: M a -> M a -> M a
 (.||.) (M p)  (M p') = M (\s -> case p s of
                     Just (v, s') -> Just (v, s')
                     Nothing      -> p' s)
+-}
 
 charp :: Char -> M Char
-charp c = (sat (== c)); 
+charp c = (sat (== c))
     
 
 parse_clean :: M a -> M a 
@@ -70,9 +136,11 @@ string :: String -> M String
 string (x:xs) = (charp x) >>= (\c -> string xs >>= (\str -> return (c:str))) 
 string [] = return []
 
+{-
 get_content :: M a -> (String -> Maybe (a, String))
 get_content (M var) = var
-    
+-}  
+
 whitespace :: M String
 whitespace = (star (charp ' '))
 
@@ -249,7 +317,7 @@ instructions_parser = do {
     return (Instructions instr1 instr2)
 }
 
-main = do putStrLn (show ((get_content init_parser) unparsed_cod))
+main = do putStrLn (show ((parse init_parser) unparsed_cod))
     where
         unparsed_cod = 
             "int s, n \n \
