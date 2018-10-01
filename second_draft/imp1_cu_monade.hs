@@ -8,12 +8,12 @@
 
 type Var = String
 
-data AExp = AVal Integer | AVar Var 
+data AExp = AVal Integer | AVar Var
               | Slash AExp AExp
               | Plus AExp AExp           -- precedence is not covered in the implementation. It should be the task of the parser
               | APar AExp deriving Show
 
-data BExp = BVal Bool 
+data BExp = BVal Bool
              | Leq AExp AExp
              | Not BExp
              | And BExp BExp -- must encode precedence
@@ -31,7 +31,7 @@ data Stmt = VoidBlock |
 
 
 -- program
-data Imp = Imp [Var] Stmt deriving Show            
+data Imp = Imp [Var] Stmt deriving Show
 
 sumimp = Imp ["s","n"] $ Seq (Assign "n" (AVal 10000)) $ While ((AVal 0) `Leq` (AVar "n")) $ Block $ Seq (Assign "s" ((AVar "s") `Plus` (AVar "n"))) (Assign "n" ((AVar "n") `Plus` (AVal (-1))))
 
@@ -51,8 +51,8 @@ class Monad M where
   (>>=) :: M a -> (a -> M b) -> M b
   m (>>=) f = case m of
                 Just x -> f x
-                Nothing -> Nothing 
-                
+                Nothing -> Nothing
+
 
 
 -- auxiliary functions where speed improvements may be done
@@ -74,7 +74,7 @@ evalAExp s (AVal i) = return i
 evalAExp s (AVar v) = if s `has` v then return $ snd $ head $ filter (\(x,_)-> x == v) s else Nothing
 
 -- exemplu de folosire a slash
-evalAExp s (e `Slash` e') = 
+evalAExp s (e `Slash` e') =
    (evalAExp s e) >>= (\x -> (evalAExp s e') >>= (\y-> ret (x / y))))
 
 
@@ -84,12 +84,12 @@ evalAExp s (e `Slash` e') =
     (_,Error m) -> Error m
     (Result v,Result v') -> Result (v `div` v')
 }
-evalAExp s (e `Plus` e') = 
+evalAExp s (e `Plus` e') =
   case ((evalAExp s e),(evalAExp s e')) of
     (Error m,_) -> Error m
     (_,Error m) -> Error m
     (Result v,Result v') -> Result (v + v')
-evalAExp s (APar e) = (evalAExp s e) 
+evalAExp s (APar e) = (evalAExp s e)
 -}
 
 evalBExp :: State -> BExp -> Result Bool
@@ -105,7 +105,7 @@ evalBExp s (e `And` e') = case (evalBExp s e) of
                             Error m -> Error m
                             Result False -> Result False
                             Result True -> evalBExp s e'
-evalBExp s (BPar e) = evalBExp s e     
+evalBExp s (BPar e) = evalBExp s e
 
 
 
@@ -120,7 +120,7 @@ eval (Imp l p) = let
                             case (evalAExp s e) of
                               Error m -> Error m
                               Result r -> Result (update v r s)
-                      else undeclared v 
+                      else undeclared v
   ev s (If c th el) = case evalBExp s c of
                         Error m -> Error m
                         Result True -> ev s th
@@ -130,13 +130,13 @@ eval (Imp l p) = let
                       case evalBExp s c of
                           Error m -> Error m
                           Result True -> ev s (Seq stmt (While c stmt))
-                          Result False -> Result s  
-                          -}                  
+                          Result False -> Result s
+                          -}
   ev s (Seq stmt stmt') = case ev s stmt of
                             Error m -> Error m
-                            Result s' -> ev s' stmt'                     
+                            Result s' -> ev s' stmt'
   -- build the initial state and evaluate the program
-  in ev (map (\x->(x,0)) l) p  
+  in ev (map (\x->(x,0)) l) p
 
 main = putStrLn $ show $ eval sumimp
 

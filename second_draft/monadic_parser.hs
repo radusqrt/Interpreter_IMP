@@ -1,6 +1,6 @@
 import Data.Maybe
 import Data.Char
-import Control.Applicative 
+import Control.Applicative
 import Control.Monad (liftM, ap)
 
 data AOp = Plus | Minus
@@ -18,10 +18,10 @@ data Item =
       -- operatie din program (ce era initial AExp, BExp)
 
 
-newtype M a = M {parse :: String -> Maybe (a, String)} 
+newtype M a = M {parse :: String -> Maybe (a, String)}
 
 {-
-class Functor t where 
+class Functor t where
   fmap :: (a -> b) -> t a -> t b
 
 signatura particulara a implementarii din instanta (vezi jos)
@@ -30,7 +30,7 @@ signatura particulara a implementarii din instanta (vezi jos)
   f :: String -> [Int]
   M String ... M [Int]
 -}
-    
+
 instance Functor M where
   fmap f (M p) = \s -> case p s of
                         Just (x,s') -> (f x,s')
@@ -51,14 +51,14 @@ instance Applicative M where
 instance Alternative M where
     empty = M (\s -> Nothing)
     (M p) <|> (M p') = \s -> case p s of
-                                Nothing -> p' s 
+                                Nothing -> p' s
                                 x -> x
 
 {-
    Operatii care vin pe gratis:
    some :: t a -> t [a]
    some v = ( (:) <$> v ) <*> many v
-   
+
    (:) :: a' -> [a'] -> [a']
    a = a'
    b = [a'] -> [a']
@@ -78,10 +78,10 @@ instance Alternative M where
 
 -}
 
-instance Monad M where    
-    return = pure 
+instance Monad M where
+    return = pure
 {-
-  (>>=) :: t a -> (a -> t b) -> t b 
+  (>>=) :: t a -> (a -> t b) -> t b
 -}
     (>>=) (M p) f =  (M (\s -> case (p s) of
                         Just (v, s') -> ((parse (f v)) s')
@@ -107,9 +107,9 @@ and_multiple p p' = p >>= (\x -> p' >>= (\y -> return (x ++ [y])))
 -}
 
 sat :: (Char -> Bool) -> M Char
-sat p = M (\s -> case s of 
+sat p = M (\s -> case s of
                     [] -> Nothing
-                    x  -> case (p (head x)) of 
+                    x  -> case (p (head x)) of
                             True -> Just ((head x), (tail x))
                             False -> Nothing)
 
@@ -122,9 +122,9 @@ sat p = M (\s -> case s of
 
 charp :: Char -> M Char
 charp c = (sat (== c))
-    
 
-parse_clean :: M a -> M a 
+
+parse_clean :: M a -> M a
 parse_clean parser = do {
     star ((string "\n") .||. (string " "));
     e <- parser;
@@ -133,26 +133,26 @@ parse_clean parser = do {
 }
 
 string :: String -> M String
-string (x:xs) = (charp x) >>= (\c -> string xs >>= (\str -> return (c:str))) 
+string (x:xs) = (charp x) >>= (\c -> string xs >>= (\str -> return (c:str)))
 string [] = return []
 
 {-
 get_content :: M a -> (String -> Maybe (a, String))
 get_content (M var) = var
--}  
+-}
 
 whitespace :: M String
 whitespace = (star (charp ' '))
 
 alphanumeric :: M String
-alphanumeric = (plus (sat isAlpha))   
+alphanumeric = (plus (sat isAlpha))
 
 numeric :: M String
 numeric = (plus (sat isNumber))
 
 variable_parser :: M String
 variable_parser = do {
-    e  <- alphanumeric;    
+    e  <- alphanumeric;
     whitespace;
     return e
 }
@@ -166,20 +166,20 @@ validate_number (x:xs) = if (isNumber x)
 numeric_parser :: M String
 numeric_parser = do {
     e <- (parse_clean numeric);
-    return e 
+    return e
 }
 
 -- --boolean logic
 bTrue :: M BExp
 bTrue = do {
       string "True";
-      return (BValue True) 
+      return (BValue True)
 }
 
 bFalse :: M BExp
 bFalse = do {
      string "False";
-     return (BValue False) 
+     return (BValue False)
 }
 
 
@@ -191,7 +191,7 @@ bl_terms_parse = do {
     return (BOperation term (get_bop b_op) remaining_terms)
 }
 
-bl_expr :: M BExp 
+bl_expr :: M BExp
 bl_expr = do {
     parse_clean (string "(");
     bterm1 <- parse_clean (bl_expr .||. bl_terms_parse .||. bTrue .||. bFalse);
@@ -218,10 +218,10 @@ aVar :: M AExp
 aVar = do {
     var <- (parse_clean variable_parser);
     return (AString var)
-} 
+}
 
 a_ops :: M String
-a_ops = string "+" .||. string "-" 
+a_ops = string "+" .||. string "-"
 
 a_terms_parse :: M AExp
 a_terms_parse = do {
@@ -235,11 +235,11 @@ a_expr :: M AExp
 a_expr = do {
     parse_clean (charp '(');
     aterm <- parse_clean (a_expr .||. a_terms_parse .||. aNum .||. aVar);
-    parse_clean (charp ')');    
-    return aterm  
+    parse_clean (charp ')');
+    return aterm
 }
 
-get_aop :: String -> AOp 
+get_aop :: String -> AOp
 get_aop "+" = Plus
 get_aop "-" = Minus
 
@@ -253,7 +253,7 @@ ba_expr = do {
     return (BCompare bterm1 (get_baop baop) bterm2)
 }
 
-get_baop :: String -> BAOp 
+get_baop :: String -> BAOp
 get_baop ">" = Greater
 get_baop "<" = Lesser
 
@@ -274,7 +274,7 @@ init_terms = do {
     return var
 }
 
-init_parser :: M AST 
+init_parser :: M AST
 init_parser = do {
     parse_clean (string "int");
     vars <- star init_terms;
@@ -283,7 +283,7 @@ init_parser = do {
     return (Init (last_var:vars) ast)
 }
 
-operations_parser :: M AST 
+operations_parser :: M AST
 operations_parser = while_expr .||. if_expr .||. asign_parser
 
 if_expr :: M AST
@@ -310,7 +310,7 @@ while_expr = do {
     return (While b_op ast)
 }
 
-instructions_parser :: M AST 
+instructions_parser :: M AST
 instructions_parser = do {
     instr1 <- operations_parser;
     instr2 <- instructions_parser .||. return (No_AST);
@@ -319,12 +319,12 @@ instructions_parser = do {
 
 main = do putStrLn (show ((parse init_parser) unparsed_cod))
     where
-        unparsed_cod = 
+        unparsed_cod =
             "int s, n \n \
             \ n = (1000 + (5 + 7)) \n \
             \ s = (n + (3 + (2 + 7) - n + (s - 3)))\n \
             \ while (a > b) {a = (b+c)}"
- 
+
 
 -- --debug stuff
 get_maybe :: Maybe (AST, String) -> AST
@@ -341,7 +341,7 @@ get_maybe_str (Just (ast,str)) = str
 instance Show AOp where
     show Plus  = "Plus"
     show Minus = "Minus"
- 
+
 instance Show BLOp where
     show And = "And"
     show Or  = "Or"
@@ -359,7 +359,7 @@ instance Show BExp where
     show (BValue boolean) = show boolean
     show (BCompare exp1 boolean arithmetic) = "(BCompare " ++ (show exp1) ++ (show boolean) ++ (show arithmetic) ++ ")"
     show (BOperation bool1 op bool2) = "(Boperation " ++ (show bool1) ++ " " ++ (show op) ++ " " ++ (show bool2) ++ ")"
- 
+
 instance Show AST where
     show (Init params remaining_AST) = "(Init " ++ (show params) ++ (show remaining_AST) ++ ")"
     show (Asign expr1 expr2) = "(Asign " ++ show expr1 ++ " " ++ show expr2 ++ ")"

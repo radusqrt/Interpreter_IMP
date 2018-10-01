@@ -9,12 +9,12 @@ data BAOp = Greater | Lesser
 --AST-ul propriu zis
 data AST  = Init [String] AST | Asign String AExp | If BExp AST AST | While BExp AST | Instructions AST AST | No_AST
 
-data Item = Item_AST AST 
-        | Item_BAOp BAOp 
-        | Item_BLOp BLOp 
-        | Item_AExp AExp 
+data Item = Item_AST AST
+        | Item_BAOp BAOp
+        | Item_BLOp BLOp
+        | Item_AExp AExp
         | Item_BExp BExp
-        | IfC AST AST 
+        | IfC AST AST
         | OpR AExp
         | OpL AExp
         | BOpR BExp
@@ -54,7 +54,7 @@ interpretor ((Item_AExp (AValue v1)):(Var str):xs, m) = (xs, (M.insert str v1 m)
 
 interpretor (((Item_AST (If (BValue True) p p')):xs),m)  = ((Item_AST p):xs,m)
 interpretor (((Item_AST (If (BValue False) p p')):xs),m) = ((Item_AST p'):xs,m)
-interpretor (((Item_AST (If c p p')):xs),m)              = ((Item_BExp c):(IfC p p'):xs,m)             
+interpretor (((Item_AST (If c p p')):xs),m)              = ((Item_BExp c):(IfC p p'):xs,m)
 interpretor (((Item_BExp (BValue b)):(IfC p p'):xs),m)   = ((Item_AST (If (BValue b) p p)):xs,m)
 
 interpretor ((Item_AST (Instructions ast1 ast2)):xs, m)  = ((Item_AST ast1):(Item_AST ast2):xs, m)
@@ -65,4 +65,4 @@ interpretor ([], m) = ([], m)
 
 set_values :: [String] -> M.Map String Integer -> M.Map String Integer
 set_values (x:xs) map = (set_values xs (M.insert x 0 map))
-set_values [] map = map 
+set_values [] map = map
